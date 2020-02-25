@@ -1,19 +1,17 @@
 package datadog.trace.agent.tooling.muzzle;
 
-import static datadog.trace.bootstrap.WeakMap.Provider.newWeakMap;
-import static net.bytebuddy.dynamic.loading.ClassLoadingStrategy.BOOTSTRAP_LOADER;
-
 import datadog.trace.agent.tooling.AgentTooling;
 import datadog.trace.agent.tooling.Utils;
+import datadog.trace.agent.tooling.WeakCache;
 import datadog.trace.agent.tooling.muzzle.Reference.Mismatch;
 import datadog.trace.agent.tooling.muzzle.Reference.Source;
-import datadog.trace.bootstrap.WeakMap;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import lombok.extern.slf4j.Slf4j;
 import net.bytebuddy.description.field.FieldDescription;
 import net.bytebuddy.description.method.MethodDescription;
@@ -22,9 +20,8 @@ import net.bytebuddy.pool.TypePool;
 
 /** Matches a set of references against a classloader. */
 @Slf4j
-public class ReferenceMatcher
-    implements WeakMap.ValueSupplier<ClassLoader, List<Reference.Mismatch>> {
-  private final WeakMap<ClassLoader, List<Reference.Mismatch>> mismatchCache = newWeakMap();
+public class ReferenceMatcher {
+  private final WeakCache<ClassLoader, List<Mismatch>> mismatchCache = WeakCache.newWeakCache();
   private final Reference[] references;
   private final Set<String> helperClassNames;
 
@@ -53,16 +50,19 @@ public class ReferenceMatcher
    * @param loader Classloader to validate against (or null for bootstrap)
    * @return A list of all mismatches between this ReferenceMatcher and loader's classpath.
    */
-  public List<Reference.Mismatch> getMismatchedReferenceSources(ClassLoader loader) {
-    if (loader == BOOTSTRAP_LOADER) {
-      loader = Utils.getBootstrapProxy();
-    }
-
-    return mismatchCache.computeIfAbsent(loader, this);
+  public List<Reference.Mismatch> getMismatchedReferenceSources(final ClassLoader loader) {
+    final ClassLoader cl = loader != null ? loader : Utils.getBootstrapProxy();
+    return mismatchCache.get(
+        cl,
+        new Callable<List<Mismatch>>() {
+          @Override
+          public List<Mismatch> call() {
+            return ReferenceMatcher.this.calculateMismatches(cl);
+          }
+        });
   }
 
-  @Override
-  public List<Mismatch> get(final ClassLoader loader) {
+  private List<Mismatch> calculateMismatches(final ClassLoader loader) {
     final List<Mismatch> mismatches = new ArrayList<>(0);
 
     for (final Reference reference : references) {

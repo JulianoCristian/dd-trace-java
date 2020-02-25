@@ -2,8 +2,8 @@ package datadog.trace.instrumentation.java.concurrent;
 
 import static datadog.trace.bootstrap.instrumentation.api.AgentTracer.activeScope;
 
+import datadog.trace.agent.tooling.WeakCache;
 import datadog.trace.bootstrap.ContextStore;
-import datadog.trace.bootstrap.WeakMap;
 import datadog.trace.bootstrap.instrumentation.java.concurrent.CallableWrapper;
 import datadog.trace.bootstrap.instrumentation.java.concurrent.RunnableWrapper;
 import datadog.trace.bootstrap.instrumentation.java.concurrent.State;
@@ -15,8 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ExecutorInstrumentationUtils {
 
-  private static final WeakMap<Executor, Boolean> EXECUTORS_DISABLED_FOR_WRAPPED_TASKS =
-      WeakMap.Provider.newWeakMap();
+  private static final WeakCache<Executor, Boolean> EXECUTORS_DISABLED_FOR_WRAPPED_TASKS =
+      WeakCache.newWeakCache();
 
   /**
    * Checks if given task should get state attached.
@@ -105,6 +105,6 @@ public class ExecutorInstrumentationUtils {
    */
   public static boolean isExecutorDisabledForThisTask(final Executor executor, final Object task) {
     return (task instanceof RunnableWrapper || task instanceof CallableWrapper)
-        && EXECUTORS_DISABLED_FOR_WRAPPED_TASKS.containsKey(executor);
+        && (EXECUTORS_DISABLED_FOR_WRAPPED_TASKS.getIfPresent(executor) != null);
   }
 }
